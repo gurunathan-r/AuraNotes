@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Search Notes - AuraNotes{% endblock %}
+
+{% block content %}
+<div class="search-container">
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <div class="search-header mb-4">
+                    <h1 class="display-6 mb-3">
+                        <i class="fas fa-search text-primary"></i> Search Your Notes
+                    </h1>
+                    <p class="lead text-muted">Find exactly what you're looking for across all your notes</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Form -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="search-form">
+                    <form method="GET" action="{{ url_for('search') }}">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="input-group input-group-lg">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control" name="q" value="{{ query }}" 
+                                           placeholder="Search through your notes, transcriptions, and tags...">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select form-select-lg" name="category">
+                                    <option value="">All Categories</option>
+                                    <option value="General" {% if category == 'General' %}selected{% endif %}>General</option>
+                                    <option value="Work" {% if category == 'Work' %}selected{% endif %}>Work</option>
+                                    <option value="Personal" {% if category == 'Personal' %}selected{% endif %}>Personal</option>
+                                    <option value="Study" {% if category == 'Study' %}selected{% endif %}>Study</option>
+                                    <option value="Ideas" {% if category == 'Ideas' %}selected{% endif %}>Ideas</option>
+                                </select>
+                            </div>
+                            <div class="col-md-1">
+                                <button type="submit" class="btn btn-primary btn-lg w-100">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search Results -->
+        {% if query or category %}
+        <div class="row">
+            <div class="col-12">
+                <div class="search-results-header mb-3">
+                    <h4>
+                        {% if query and category %}
+                            Search results for "{{ query }}" in {{ category }}
+                        {% elif query %}
+                            Search results for "{{ query }}"
+                        {% elif category %}
+                            Notes in {{ category }} category
+                        {% endif %}
+                        <span class="badge bg-primary ms-2">{{ notes|length }} found</span>
+                    </h4>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Results Grid -->
+        <div class="row">
+            {% for note in notes %}
+            <div class="col-md-6 col-lg-4 mb-4">
+                <div class="note-card search-result-card">
+                    <div class="note-header">
+                        <h5 class="note-title">{{ note.title }}</h5>
+                        <div class="note-type-badge">
+                            {% if note.note_type == 'text' %}
+                                <span class="badge bg-primary">Text</span>
+                            {% elif note.note_type == 'file' %}
+                                <span class="badge bg-success">File</span>
+                            {% elif note.note_type == 'audio' %}
+                                <span class="badge bg-warning">Audio</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="note-content">
+                        <p class="note-preview">{{ note.content[:150] }}{% if note.content|length > 150 %}...{% endif %}</p>
+                        {% if note.transcription %}
+                        <div class="transcription-preview">
+                            <small class="text-muted">
+                                <i class="fas fa-microphone"></i> Transcription: {{ note.transcription[:100] }}...
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="note-meta">
+                        <small class="text-muted">
+                            <i class="fas fa-calendar"></i> {{ note.created_at.strftime('%Y-%m-%d') }}
+                            <i class="fas fa-tag ms-2"></i> {{ note.category }}
+                        </small>
+                    </div>
+                    
+                    <div class="note-actions">
+                        <a href="{{ url_for('edit_note', note_id=note.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-edit"></i> Edit
+                        </a>
+                        <a href="{{ url_for('export_note', note_id=note.id) }}" class="btn btn-sm btn-outline-success">
+                            <i class="fas fa-download"></i> Export
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        {% if (query or category) and not notes %}
+        <div class="row">
+            <div class="col-12">
+                <div class="empty-state text-center py-5">
+                    <i class="fas fa-search fa-3x text-muted mb-3"></i>
+                    <h3>No results found</h3>
+                    <p class="text-muted">
+                        {% if query and category %}
+                            No notes found for "{{ query }}" in {{ category }} category.
+                        {% elif query %}
+                            No notes found for "{{ query }}".
+                        {% elif category %}
+                            No notes found in {{ category }} category.
+                        {% endif %}
+                    </p>
+                    <p class="text-muted">Try adjusting your search terms or category filter.</p>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not query and not category %}
+        <div class="row">
+            <div class="col-12">
+                <div class="search-tips">
+                    <h4 class="mb-3">Search Tips</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="tip-card">
+                                <i class="fas fa-lightbulb text-warning"></i>
+                                <h5>Search Everything</h5>
+                                <p>Search through note titles, content, transcriptions, and tags</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="tip-card">
+                                <i class="fas fa-microphone text-info"></i>
+                                <h5>Audio Search</h5>
+                                <p>Find audio notes by searching their transcribed content</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

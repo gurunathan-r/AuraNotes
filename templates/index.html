@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome to AuraNotes{% endblock %}
+
+{% block content %}
+<div class="hero-section">
+    <div class="container">
+        <div class="row align-items-center min-vh-100">
+            <div class="col-lg-6">
+                <div class="hero-content">
+                    <h1 class="display-4 fw-bold text-white mb-4">
+                        <i class="fas fa-magic"></i> AuraNotes
+                    </h1>
+                    <p class="lead text-white mb-4">
+                        Your intelligent note-taking companion. Create, organize, and search through your notes with ease. 
+                        Support for text, files, and audio with automatic transcription.
+                    </p>
+                    <div class="hero-features">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="feature-item">
+                                    <i class="fas fa-keyboard text-primary"></i>
+                                    <span>Text Notes</span>
+                                </div>
+                                <div class="feature-item">
+                                    <i class="fas fa-file-upload text-success"></i>
+                                    <span>File Upload</span>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="feature-item">
+                                    <i class="fas fa-microphone text-warning"></i>
+                                    <span>Audio Transcription</span>
+                                </div>
+                                <div class="feature-item">
+                                    <i class="fas fa-search text-info"></i>
+                                    <span>Smart Search</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="hero-buttons mt-4">
+                        <a href="{{ url_for('signup') }}" class="btn btn-primary btn-lg me-3">
+                            <i class="fas fa-user-plus"></i> Get Started
+                        </a>
+                        <a href="{{ url_for('login') }}" class="btn btn-outline-light btn-lg">
+                            <i class="fas fa-sign-in-alt"></i> Login
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <div class="hero-image">
+                    <div class="floating-card">
+                        <i class="fas fa-sticky-note"></i>
+                        <h5>Smart Notes</h5>
+                        <p>Organize your thoughts effortlessly</p>
+                    </div>
+                    <div class="floating-card">
+                        <i class="fas fa-microphone"></i>
+                        <h5>Voice to Text</h5>
+                        <p>Speak your ideas, we'll write them</p>
+                    </div>
+                    <div class="floating-card">
+                        <i class="fas fa-search"></i>
+                        <h5>Find Anything</h5>
+                        <p>Search through all your content</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="features-section py-5">
+    <div class="container">
+        <h2 class="text-center mb-5">Why Choose AuraNotes?</h2>
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <h4>Intelligent Organization</h4>
+                    <p>Automatically categorize and tag your notes for easy retrieval.</p>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-share-alt"></i>
+                    </div>
+                    <h4>Collaborate & Share</h4>
+                    <p>Share your notes with colleagues and collaborate in real-time.</p>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <h4>Analytics Dashboard</h4>
+                    <p>Track your productivity with detailed analytics and insights.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
