@@ -78,6 +78,8 @@ document.addEventListener('DOMContentLoaded', function() {
         noteTypeSelect.addEventListener('change', function() {
             toggleFileInput();
         });
+        // Ensure correct UI state on initial load
+        try { toggleFileInput(); } catch (e) { /* ignore */ }
     }
 
     // Character counter for textareas
@@ -433,33 +435,44 @@ function toggleFileInput() {
             const stopButton = document.getElementById('stopButton');
             const saveButton = document.getElementById('saveRecording');
             const discardButton = document.getElementById('discardRecording');
-            
-            recordButton.onclick = async () => {
-                if (!mediaRecorder) {
-                    const initialized = await initializeRecorder();
-                    if (initialized) {
+
+            // Attach handlers only if elements exist to avoid JS errors
+            if (recordButton) {
+                recordButton.onclick = async () => {
+                    if (!mediaRecorder) {
+                        const initialized = await initializeRecorder();
+                        if (initialized) {
+                            startRecording();
+                        }
+                    } else {
                         startRecording();
                     }
-                } else {
-                    startRecording();
-                }
-            };
-            
-            pauseButton.onclick = () => {
-                pauseRecording();
-            };
-            
-            stopButton.onclick = () => {
-                stopRecording();
-            };
-            
-            discardButton.onclick = () => {
-                document.getElementById('audioPreview').style.display = 'none';
-                document.getElementById('file').value = '';
-                audioChunks = [];
-                // Reset progress bar
-                document.getElementById('durationProgress').style.width = '0%';
-            };
+                };
+            }
+
+            if (pauseButton) {
+                pauseButton.onclick = () => {
+                    pauseRecording();
+                };
+            }
+
+            if (stopButton) {
+                stopButton.onclick = () => {
+                    stopRecording();
+                };
+            }
+
+            if (discardButton) {
+                discardButton.onclick = () => {
+                    document.getElementById('audioPreview').style.display = 'none';
+                    const fileInputEl = document.getElementById('file');
+                    if (fileInputEl) fileInputEl.value = '';
+                    audioChunks = [];
+                    // Reset progress bar
+                    const prog = document.getElementById('durationProgress');
+                    if (prog) prog.style.width = '0%';
+                };
+            }
             
         } else {
             voiceRecorder.style.display = 'none';
@@ -472,6 +485,20 @@ function toggleFileInput() {
         ffmpegWarning.style.display = 'none';
     }
 }
+
+// Ensure recorder state updates when the modal is opened (Bootstrap modal event)
+document.addEventListener('DOMContentLoaded', function() {
+    try {
+        const createModalEl = document.getElementById('createNoteModal');
+        if (createModalEl) {
+            createModalEl.addEventListener('show.bs.modal', function () {
+                try { toggleFileInput(); } catch (e) { /* ignore */ }
+            });
+        }
+    } catch (e) {
+        // if bootstrap events are not available, silently ignore
+    }
+});
 
 // Toast notification styles
 const toastStyles = `
