@@ -1,0 +1,13 @@
+[Unit]
+Description=AuraNote Web Application
+After=network.target
+
+[Service]
+User=admin
+Group=admin
+WorkingDirectory=/home/admin/AuraNotes
+Environment="PATH=/home/admin/AuraNotes/.venv/bin"
+ExecStart=/home/admin/AuraNotes/.venv/bin/gunicorn --workers 3 --bind 127.0.0.1:8000 app:app
+
+[Install]
+WantedBy=multi-user.target

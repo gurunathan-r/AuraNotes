@@ -398,4 +398,19 @@ def export_note(note_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=80, debug=True)
+
+    # Allow configuring TLS cert/key paths and port via environment variables.
+    # On Linux you can set SSL_CERT_FILE and SSL_KEY_FILE to enable HTTPS.
+    ssl_cert = os.environ.get('SSL_CERT_FILE')
+    ssl_key = os.environ.get('SSL_KEY_FILE')
+    port = int(os.environ.get('PORT', '80'))
+
+    if ssl_cert and ssl_key and os.path.exists(ssl_cert) and os.path.exists(ssl_key):
+        # If user provided certs, run HTTPS. Port default for HTTPS is 443.
+        if port == 80:
+            port = 443
+        print(f"Starting with HTTPS on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=True, ssl_context=(ssl_cert, ssl_key))
+    else:
+        print(f"Starting without TLS on port {port}. To enable TLS set SSL_CERT_FILE and SSL_KEY_FILE environment variables.")
+        app.run(host='0.0.0.0', port=port, debug=True)

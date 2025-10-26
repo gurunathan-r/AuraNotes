@@ -299,7 +299,10 @@ async function initializeRecorder() {
         source.connect(volumeAnalyser);
         volumeDataArray = new Uint8Array(volumeAnalyser.frequencyBinCount);
         
-        mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder = new MediaRecorder(stream);
+    // keep references for cleanup
+    mediaRecorder._audioContext = audioContext;
+    mediaRecorder._stream = stream;
         
         mediaRecorder.ondataavailable = (event) => {
             audioChunks.push(event.data);
@@ -318,22 +321,48 @@ async function initializeRecorder() {
         };
         
         mediaRecorder.onstop = () => {
-            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = document.getElementById('recordedAudio');
-            audio.src = audioUrl;
-            document.getElementById('audioPreview').style.display = 'block';
-            
-            // Add the recorded audio to the file input
-            const file = new File([audioBlob], 'recorded_audio.wav', { type: 'audio/wav' });
-            const container = new DataTransfer();
-            container.items.add(file);
-            document.getElementById('file').files = container.files;
-            
-            // Clean up
-            cancelAnimationFrame(animationFrame);
-            document.querySelector('.volume-meter-container').style.display = 'none';
-            audioContext.close();
+            try {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = document.getElementById('recordedAudio');
+                if (audio) audio.src = audioUrl;
+                const preview = document.getElementById('audioPreview');
+                if (preview) preview.style.display = 'block';
+
+                // Add the recorded audio to the file input
+                const file = new File([audioBlob], 'recorded_audio.wav', { type: 'audio/wav' });
+                const container = new DataTransfer();
+                container.items.add(file);
+                const fileInputEl = document.getElementById('file');
+                if (fileInputEl) fileInputEl.files = container.files;
+
+                // Clean up
+                cancelAnimationFrame(animationFrame);
+                const volCont = document.querySelector('.volume-meter-container');
+                if (volCont) volCont.style.display = 'none';
+                if (mediaRecorder && mediaRecorder._audioContext) {
+                    try { mediaRecorder._audioContext.close(); } catch (e) { /* ignore */ }
+                }
+            } finally {
+                // mark recorder as gone so we re-initialize next time
+                mediaRecorder = null;
+            }
+        };
+
+        mediaRecorder.onerror = (ev) => {
+            console.error('MediaRecorder error', ev);
+            // Reset UI and allow re-init
+            const recordBtn = document.getElementById('recordButton');
+            const pauseBtn = document.getElementById('pauseButton');
+            const stopBtn = document.getElementById('stopButton');
+            const volCont = document.querySelector('.volume-meter-container');
+            if (recordBtn) recordBtn.style.display = 'inline-block';
+            if (pauseBtn) pauseBtn.style.display = 'none';
+            if (stopBtn) stopBtn.style.display = 'none';
+            if (volCont) volCont.style.display = 'none';
+            try { if (mediaRecorder && mediaRecorder._stream) mediaRecorder._stream.getTracks().forEach(t=>t.stop()); } catch(e){}
+            try { if (mediaRecorder && mediaRecorder._audioContext) mediaRecorder._audioContext.close(); } catch(e){}
+            mediaRecorder = null;
         };
         
         return true;
@@ -373,7 +402,19 @@ function updateRecordingTime() {
 function startRecording() {
     audioChunks = [];
     totalPausedTime = 0;
-    mediaRecorder.start(1000); // Collect data every second
+    try {
+        mediaRecorder.start(1000); // Collect data every second
+    } catch (err) {
+        // if start fails, try to re-initialize and start again
+        console.warn('startRecording failed, re-initializing recorder', err);
+        mediaRecorder = null;
+        initializeRecorder().then(initialized => {
+            if (initialized && mediaRecorder) {
+                try { mediaRecorder.start(1000); } catch(e) { console.error('Failed to start after re-init', e); }
+            }
+        });
+        return;
+    }
     startTime = Date.now();
     
     // Update UI
@@ -400,7 +441,9 @@ function pauseRecording() {
 }
 
 function stopRecording() {
-    mediaRecorder.stop();
+    try {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    } catch (e) { console.warn('stopRecording error', e); }
     clearInterval(recordingTimer);
     
     // Update UI
@@ -411,7 +454,11 @@ function stopRecording() {
     document.getElementById('durationProgress').style.width = '0%';
     
     // Stop all audio tracks
-    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+    try {
+        if (mediaRecorder && mediaRecorder._stream) mediaRecorder._stream.getTracks().forEach(track => track.stop());
+    } catch (e) { /* ignore */ }
+    // ensure mediaRecorder is cleared (onstop will also clear it)
+    // mediaRecorder = null;
 }
 
 // Global functions
@@ -435,6 +482,22 @@ function toggleFileInput() {
             const stopButton = document.getElementById('stopButton');
             const saveButton = document.getElementById('saveRecording');
             const discardButton = document.getElementById('discardRecording');
+
+            // Reset recorder UI to a known good state so record button is always visible
+            try {
+                if (recordButton) recordButton.style.display = 'inline-block';
+                if (pauseButton) pauseButton.style.display = 'none';
+                if (stopButton) stopButton.style.display = 'none';
+                const recTime = document.getElementById('recordingTime');
+                if (recTime) recTime.style.display = 'none';
+                const prog = document.getElementById('durationProgress');
+                if (prog) prog.style.width = '0%';
+                const volCont = document.querySelector('.volume-meter-container');
+                if (volCont) {
+                    volCont.style.display = 'none';
+                    volCont.classList.remove('recording');
+                }
+            } catch (e) { /* ignore */ }
 
             // Attach handlers only if elements exist to avoid JS errors
             if (recordButton) {
@@ -471,6 +534,13 @@ function toggleFileInput() {
                     // Reset progress bar
                     const prog = document.getElementById('durationProgress');
                     if (prog) prog.style.width = '0%';
+                    // Ensure record button visible after discard
+                    const recordBtn = document.getElementById('recordButton');
+                    const pauseBtn = document.getElementById('pauseButton');
+                    const stopBtn = document.getElementById('stopButton');
+                    if (recordBtn) recordBtn.style.display = 'inline-block';
+                    if (pauseBtn) pauseBtn.style.display = 'none';
+                    if (stopBtn) stopBtn.style.display = 'none';
                 };
             }
             
@@ -493,6 +563,36 @@ document.addEventListener('DOMContentLoaded', function() {
         if (createModalEl) {
             createModalEl.addEventListener('show.bs.modal', function () {
                 try { toggleFileInput(); } catch (e) { /* ignore */ }
+            });
+            // also ensure cleanup when modal is hidden
+            createModalEl.addEventListener('hidden.bs.modal', function () {
+                try {
+                    // if a recording is in progress, stop and cleanup
+                    if (mediaRecorder && mediaRecorder.state && mediaRecorder.state !== 'inactive') {
+                        try { mediaRecorder.stop(); } catch(e) { /* ignore */ }
+                    }
+                    if (mediaRecorder && mediaRecorder._stream) {
+                        try { mediaRecorder._stream.getTracks().forEach(t=>t.stop()); } catch(e){}
+                    }
+                    if (mediaRecorder && mediaRecorder._audioContext) {
+                        try { mediaRecorder._audioContext.close(); } catch(e){}
+                    }
+                } catch (e) {
+                    console.warn('Error during modal hidden cleanup', e);
+                } finally {
+                    mediaRecorder = null;
+                    audioChunks = [];
+                    clearInterval(recordingTimer);
+                    cancelAnimationFrame(animationFrame);
+                    const volCont = document.querySelector('.volume-meter-container');
+                    if (volCont) volCont.style.display = 'none';
+                    const recordBtn = document.getElementById('recordButton');
+                    const pauseBtn = document.getElementById('pauseButton');
+                    const stopBtn = document.getElementById('stopButton');
+                    if (recordBtn) recordBtn.style.display = 'inline-block';
+                    if (pauseBtn) pauseBtn.style.display = 'none';
+                    if (stopBtn) stopBtn.style.display = 'none';
+                }
             });
         }
     } catch (e) {
