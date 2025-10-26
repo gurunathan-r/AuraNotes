@@ -416,6 +416,110 @@ body {
     padding: 1.5rem;
 }
 
+/* Voice Recorder Styles */
+.voice-recorder-controls {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+#recordingTime {
+    font-family: monospace;
+    font-size: 1.2rem;
+    color: var(--danger-color);
+}
+
+#recordButton, #stopButton, #pauseButton {
+    min-width: 120px;
+}
+
+#recordButton:hover {
+    animation: pulse 1s infinite;
+}
+
+.recording-limit-indicator {
+    flex: 1;
+    min-width: 200px;
+    margin-left: 1rem;
+}
+
+.recording-limit-indicator .progress {
+    height: 0.5rem;
+    background-color: #e5e7eb;
+    border-radius: 1rem;
+}
+
+.recording-limit-indicator .progress-bar {
+    background: var(--gradient-primary);
+    border-radius: 1rem;
+    transition: width 1s linear;
+}
+
+.volume-meter-container {
+    margin: 1rem 0;
+    padding: 1rem;
+    background: #f8fafc;
+    border-radius: 10px;
+}
+
+.volume-meter {
+    height: 20px;
+    background: #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.volume-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, var(--success-color) 0%, var(--warning-color) 70%, var(--danger-color) 100%);
+    transition: width 0.1s ease;
+    transform-origin: left;
+}
+
+.volume-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+}
+
+@keyframes recording-pulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.8; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+.recording .volume-meter {
+    animation: recording-pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
+}
+
+#audioPreview {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 10px;
+    margin-top: 1rem;
+}
+
+#recordedAudio {
+    width: 100%;
+    margin-bottom: 1rem;
+}
+
 /* Button Styles */
 .btn-primary {
     background: var(--gradient-primary);

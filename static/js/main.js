@@ -273,23 +273,201 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Voice recording functionality
+let mediaRecorder;
+let audioChunks = [];
+let recordingTimer;
+let startTime;
+let pauseStartTime;
+let totalPausedTime = 0;
+let volumeAnalyser;
+let volumeDataArray;
+let animationFrame;
+const MAX_RECORDING_DURATION = 5 * 60; // 5 minutes in seconds
+
+async function initializeRecorder() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        
+        // Set up analyser for volume meter
+        volumeAnalyser = audioContext.createAnalyser();
+        volumeAnalyser.fftSize = 256;
+        source.connect(volumeAnalyser);
+        volumeDataArray = new Uint8Array(volumeAnalyser.frequencyBinCount);
+        
+        mediaRecorder = new MediaRecorder(stream);
+        
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+        
+        mediaRecorder.onpause = () => {
+            pauseStartTime = Date.now();
+            document.getElementById('pauseButton').innerHTML = '<i class="fas fa-play"></i> Resume';
+            document.querySelector('.volume-meter-container').classList.remove('recording');
+        };
+        
+        mediaRecorder.onresume = () => {
+            totalPausedTime += Date.now() - pauseStartTime;
+            document.getElementById('pauseButton').innerHTML = '<i class="fas fa-pause"></i> Pause';
+            document.querySelector('.volume-meter-container').classList.add('recording');
+        };
+        
+        mediaRecorder.onstop = () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const audioUrl = URL.createObjectURL(audioBlob);
+            const audio = document.getElementById('recordedAudio');
+            audio.src = audioUrl;
+            document.getElementById('audioPreview').style.display = 'block';
+            
+            // Add the recorded audio to the file input
+            const file = new File([audioBlob], 'recorded_audio.wav', { type: 'audio/wav' });
+            const container = new DataTransfer();
+            container.items.add(file);
+            document.getElementById('file').files = container.files;
+            
+            // Clean up
+            cancelAnimationFrame(animationFrame);
+            document.querySelector('.volume-meter-container').style.display = 'none';
+            audioContext.close();
+        };
+        
+        return true;
+    } catch (error) {
+        console.error('Error accessing microphone:', error);
+        alert('Could not access microphone. Please ensure you have granted microphone permissions.');
+        return false;
+    }
+}
+
+function updateVolumeMeter() {
+    volumeAnalyser.getByteFrequencyData(volumeDataArray);
+    const average = volumeDataArray.reduce((acc, val) => acc + val, 0) / volumeDataArray.length;
+    const volume = Math.min(100, average * 1.5); // Scale up for better visual feedback
+    document.getElementById('volumeBar').style.width = volume + '%';
+    animationFrame = requestAnimationFrame(updateVolumeMeter);
+}
+
+function updateRecordingTime() {
+    const now = Date.now();
+    const elapsed = Math.floor((now - startTime - totalPausedTime) / 1000);
+    const minutes = Math.floor(elapsed / 60).toString().padStart(2, '0');
+    const seconds = (elapsed % 60).toString().padStart(2, '0');
+    document.getElementById('recordingTime').textContent = `${minutes}:${seconds}`;
+    
+    // Update progress bar
+    const progress = (elapsed / MAX_RECORDING_DURATION) * 100;
+    document.getElementById('durationProgress').style.width = progress + '%';
+    
+    // Auto-stop if max duration reached
+    if (elapsed >= MAX_RECORDING_DURATION) {
+        stopRecording();
+        alert('Maximum recording duration (5 minutes) reached.');
+    }
+}
+
+function startRecording() {
+    audioChunks = [];
+    totalPausedTime = 0;
+    mediaRecorder.start(1000); // Collect data every second
+    startTime = Date.now();
+    
+    // Update UI
+    document.getElementById('recordButton').style.display = 'none';
+    document.getElementById('pauseButton').style.display = 'inline-block';
+    document.getElementById('stopButton').style.display = 'inline-block';
+    document.getElementById('recordingTime').style.display = 'inline-block';
+    document.querySelector('.volume-meter-container').style.display = 'block';
+    document.querySelector('.volume-meter-container').classList.add('recording');
+    
+    // Start timers
+    recordingTimer = setInterval(updateRecordingTime, 1000);
+    updateVolumeMeter();
+}
+
+function pauseRecording() {
+    if (mediaRecorder.state === 'recording') {
+        mediaRecorder.pause();
+        clearInterval(recordingTimer);
+    } else if (mediaRecorder.state === 'paused') {
+        mediaRecorder.resume();
+        recordingTimer = setInterval(updateRecordingTime, 1000);
+    }
+}
+
+function stopRecording() {
+    mediaRecorder.stop();
+    clearInterval(recordingTimer);
+    
+    // Update UI
+    document.getElementById('recordButton').style.display = 'inline-block';
+    document.getElementById('pauseButton').style.display = 'none';
+    document.getElementById('stopButton').style.display = 'none';
+    document.getElementById('recordingTime').style.display = 'none';
+    document.getElementById('durationProgress').style.width = '0%';
+    
+    // Stop all audio tracks
+    mediaRecorder.stream.getTracks().forEach(track => track.stop());
+}
+
 // Global functions
 function toggleFileInput() {
     const noteType = document.getElementById('note_type').value;
     const fileInputGroup = document.getElementById('file-input-group');
     const contentTextarea = document.getElementById('content');
     const ffmpegWarning = document.getElementById('ffmpeg-warning');
+    const voiceRecorder = document.getElementById('voice-recorder');
     
     if (noteType === 'file' || noteType === 'audio') {
         fileInputGroup.style.display = 'block';
         if (noteType === 'audio') {
             contentTextarea.placeholder = 'Audio transcription will be added automatically...';
             ffmpegWarning.style.display = 'block';
+            voiceRecorder.style.display = 'block';
+            
+            // Initialize voice recorder
+            const recordButton = document.getElementById('recordButton');
+            const pauseButton = document.getElementById('pauseButton');
+            const stopButton = document.getElementById('stopButton');
+            const saveButton = document.getElementById('saveRecording');
+            const discardButton = document.getElementById('discardRecording');
+            
+            recordButton.onclick = async () => {
+                if (!mediaRecorder) {
+                    const initialized = await initializeRecorder();
+                    if (initialized) {
+                        startRecording();
+                    }
+                } else {
+                    startRecording();
+                }
+            };
+            
+            pauseButton.onclick = () => {
+                pauseRecording();
+            };
+            
+            stopButton.onclick = () => {
+                stopRecording();
+            };
+            
+            discardButton.onclick = () => {
+                document.getElementById('audioPreview').style.display = 'none';
+                document.getElementById('file').value = '';
+                audioChunks = [];
+                // Reset progress bar
+                document.getElementById('durationProgress').style.width = '0%';
+            };
+            
         } else {
+            voiceRecorder.style.display = 'none';
             ffmpegWarning.style.display = 'none';
         }
     } else {
         fileInputGroup.style.display = 'none';
+        voiceRecorder.style.display = 'none';
         contentTextarea.placeholder = 'Write your note content here...';
         ffmpegWarning.style.display = 'none';
     }
