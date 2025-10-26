@@ -1,5 +1,5 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -61,15 +61,27 @@ def load_user(user_id):
 # Audio transcription function
 def transcribe_audio(audio_file_path):
     try:
+        # First check if ffmpeg is available when needed
+        if not audio_file_path.lower().endswith('.wav'):
+            import shutil
+            if not shutil.which('ffmpeg'):
+                return ("FFmpeg is required but not installed. Please install FFmpeg:\n"
+                       "1. Download from https://ffmpeg.org/download.html\n"
+                       "2. Add to your system PATH\n"
+                       "3. Restart your application")
+        
         r = sr.Recognizer()
         
-        # Try direct recognition first (works with WAV files)
+        # Try direct recognition first (for WAV files)
         try:
             with sr.AudioFile(audio_file_path) as source:
-                r.adjust_for_ambient_noise(source)
+                # Increase the ambient noise adjustment duration
+                r.adjust_for_ambient_noise(source, duration=0.5)
                 audio_data = r.record(source)
                 text = r.recognize_google(audio_data)
                 return text
+        except sr.UnknownValueError:
+            return "Could not understand audio - speech not detected or audio quality too low"
         except Exception as direct_error:
             # If direct recognition fails, try FFmpeg conversion
             try:
@@ -80,18 +92,35 @@ def transcribe_audio(audio_file_path):
                 if len(audio) > max_length:
                     audio = audio[:max_length]
                 
-                wav_path = audio_file_path.replace('.mp3', '.wav').replace('.m4a', '.wav')
-                audio.export(wav_path, format="wav")
+                # Create a temporary WAV file
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as temp_wav:
+                    wav_path = temp_wav.name
+                    audio.export(wav_path, format="wav")
                 
                 with sr.AudioFile(wav_path) as source:
-                    r.adjust_for_ambient_noise(source)
+                    r.adjust_for_ambient_noise(source, duration=0.5)
                     audio_data = r.record(source)
                     text = r.recognize_google(audio_data)
-                    return text
+                    
+                # Clean up temp file
+                import os
+                try:
+                    os.unlink(wav_path)
+                except:
+                    pass
+                    
+                return text
                     
             except Exception as ffmpeg_error:
-                # If both methods fail, return helpful message
-                return f"Audio transcription failed. Please try:\n1. Convert your audio to WAV format\n2. Install FFmpeg for MP3/M4A support\n3. Use shorter audio files (under 5 minutes)\n\nError: {str(ffmpeg_error)}"
+                # Provide more specific error messages
+                error_msg = str(ffmpeg_error).lower()
+                if "ffmpeg" in error_msg:
+                    return "FFmpeg is required for processing this audio format. Please install FFmpeg."
+                elif "duration" in error_msg:
+                    return "Audio file too long - please keep files under 5 minutes"
+                else:
+                    return f"Could not process audio: {str(ffmpeg_error)}\nTry:\n1. Check audio file isn't corrupted\n2. Convert to WAV format\n3. Ensure clear speech audio"
                 
     except sr.WaitTimeoutError:
         return "Transcription timeout - audio file may be too long or corrupted"
@@ -202,22 +231,23 @@ def create_note():
         file = request.files['file']
         if file and file.filename:
             filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            note.file_path = file_path
-            
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(save_path)
+            # store only the filename in DB (safer and easier to serve)
+            note.file_path = filename
+
             if note_type == 'file':
                 # Read text file content
                 try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
+                    with open(save_path, 'r', encoding='utf-8') as f:
                         note.content = f.read()
-                except:
+                except Exception:
                     note.content = "Error reading file content"
-            
+
             elif note_type == 'audio':
                 # Transcribe audio with fallback
                 try:
-                    note.transcription = transcribe_audio(file_path)
+                    note.transcription = transcribe_audio(save_path)
                     note.content = f"Audio file: {filename}\n\nTranscription:\n{note.transcription}"
                 except Exception as e:
                     # If transcription fails, still save the note
@@ -261,14 +291,27 @@ def delete_note(note_id):
         flash('You can only delete your own notes')
         return redirect(url_for('dashboard'))
     
-    if note.file_path and os.path.exists(note.file_path):
-        os.remove(note.file_path)
+    if note.file_path:
+        # handle legacy values that might contain full paths; use basename to be safe
+        filename = os.path.basename(note.file_path)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        if os.path.exists(file_path):
+            os.remove(file_path)
     
     db.session.delete(note)
     db.session.commit()
     
     flash('Note deleted successfully!')
     return redirect(url_for('dashboard'))
+
+
+@app.route('/uploads/<path:filename>')
+@login_required
+def uploaded_file(filename):
+    """Serve uploaded files from the uploads folder."""
+    # If a full path was stored accidentally, extract just the filename portion
+    safe_filename = os.path.basename(filename)
+    return send_from_directory(app.config['UPLOAD_FOLDER'], safe_filename)
 
 @app.route('/search')
 @login_required
@@ -279,14 +322,27 @@ def search():
     notes_query = Note.query.filter_by(user_id=current_user.id)
     
     if query:
-        notes_query = notes_query.filter(
-            db.or_(
-                Note.title.contains(query),
-                Note.content.contains(query),
-                Note.transcription.contains(query),
-                Note.tags.contains(query)
+        # Use case-insensitive search where supported
+        pattern = f"%{query}%"
+        try:
+            notes_query = notes_query.filter(
+                db.or_(
+                    Note.title.ilike(pattern),
+                    Note.content.ilike(pattern),
+                    Note.transcription.ilike(pattern),
+                    Note.tags.ilike(pattern)
+                )
             )
-        )
+        except Exception:
+            # Fallback for DB backends that may not support ilike
+            notes_query = notes_query.filter(
+                db.or_(
+                    Note.title.contains(query),
+                    Note.content.contains(query),
+                    Note.transcription.contains(query),
+                    Note.tags.contains(query)
+                )
+            )
     
     if category:
         notes_query = notes_query.filter_by(category=category)
